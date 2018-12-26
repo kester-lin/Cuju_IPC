@@ -527,9 +527,9 @@ e1000_send_packet(E1000State *s, const uint8_t *buf, int size)
     if (s->phy_reg[PHY_CTRL] & MII_CR_LOOPBACK) {
         nc->info->receive(nc, buf, size);
     } else {
-        // For CUJU-FT
-        //qemu_send_packet(nc, buf, size);
-        qemu_send_packet_proxy(nc, buf, size);
+        // For CUJU-FT close buffer output
+        qemu_send_packet(nc, buf, size);
+        //qemu_send_packet_proxy(nc, buf, size);
     }
     inc_tx_bcast_or_mcast_count(s, buf);
     e1000x_increase_size_stats(s->mac_reg, PTCregs, size);
