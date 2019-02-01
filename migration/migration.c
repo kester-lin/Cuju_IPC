@@ -154,6 +154,7 @@ static PostcopyState incoming_postcopy_state;
 
 // for CUJU-FT
 enum CUJU_FT_MODE cuju_ft_mode = CUJU_FT_OFF;
+unsigned long ipc_epochid = 0;
 
 
 #define TIMEVAL_TO_DOUBLE(tv)   ((tv).tv_sec + \
@@ -175,6 +176,8 @@ int qio_ft_sock_fd = 0;
 
 // At the time setting up FT, current will pointer to 2nd MigrationState.
 static int migration_states_current;
+
+unsigned int g_epoch_id = 0;
 
 static void migrate_fd_get_notify(void *opaque);
 
@@ -2253,6 +2256,9 @@ static void kvmft_flush_output(MigrationState *s)
         kvm_blk_epoch_commit(kvm_blk_session);
 	*/
 
+    if (haproxy_ipc)
+        cuju_ft_ipc_epoch_commit(g_epoch_id);
+
     virtio_blk_commit_temp_list(s->virtio_blk_temp_list);
     s->virtio_blk_temp_list = NULL;
     s->net_list_empty = event_tap_net_list_empty(s->ft_event_tap_net_list);
@@ -2558,6 +2564,10 @@ static void *migration_thread(void *opaque)
         //	kvm_blk_notify_ft(kvm_blk_session);
 
 		//memory_global_dirty_log_start();  //For debug
+
+        if(haproxy_ipc)
+            cuju_ft_ipc_notify_ft(g_epoch_id);
+
         kvm_shmem_start_ft();
 
 		migrate_token_owner = migrate_by_index(0);
@@ -2886,6 +2896,10 @@ static void migrate_timer(void *opaque)
     qemu_mutex_lock_iothread();
     vm_stop_mig();
     qemu_iohandler_ft_pause(true);
+
+    if (haproxy_ipc)
+        cuju_ft_ipc_epoch_timer(++g_epoch_id);
+
 
     s->flush_vs_commit1 = false;
     s->transfer_start_time = time_in_double();

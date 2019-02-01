@@ -45,7 +45,8 @@ extern void kvm_shmem_load_ram(void *buf, int size);
 extern void kvm_shmem_load_ram_with_hdr(void *buf, int size, void *hdr_buf, int hdr_size);
 
 char *blk_server = NULL;
-
+char *haproxy_ipc = NULL;
+static int ipc_fd = 0;
 
 static CujuQEMUFileFtTrans **cuju_ft_trans;
 static int cuju_ft_trans_count;
@@ -1272,4 +1273,110 @@ void qmp_cuju_failover(Error **errp)
 {
 	printf("qmp_cuju_failover\n");
 	cuju_ft_trans_close(last_cuju_ft_trans);
+}
+
+
+int cuju_ft_init(const char *p)
+{
+    Error *err = NULL;
+
+    SocketAddress* sa = socket_parse(p, &err);
+
+    if (err) {
+        error_report_err(err);
+    }
+    
+    ipc_fd = socket_connect(sa, &err, NULL, NULL);
+
+    if (err) {
+        printf("Can't connect to HAProxy IPC server\n");
+        error_report_err(err);
+        return -1;
+    }
+
+    printf("Connect to HAProxy IPC server\n");
+
+#if 0    
+    assert(!qemu_iohandler_is_ft_paused());
+    qemu_set_fd_handler(s,kvm_blk_accept,NULL,(void *)(intptr_t)s);
+#endif    
+    return 0;
+}
+
+#if 0
+/* IPC PROTO */
+struct proto_ipc
+{
+    unsigned int ipc_mode:8;
+    unsigned int cuju_ft_mode:8;
+    unsigned int gft_id:16;
+    unsigned int ephch_id;
+    unsigned int packet_cnt:16;
+    unsigned int packet_size:16;
+    unsigned int time_interval;
+    unsigned int nic_count:16;
+    unsigned int conn_count:16;
+    unsigned char *conn_info;
+};
+#define KVM_BLK_CMD_READ        0x1
+#define KVM_BLK_CMD_WRITE       0x2
+#define KVM_BLK_CMD_EPOCH_TIMER 0x3
+#define KVM_BLK_CMD_COMMIT      0x4
+#define KVM_BLK_CMD_COMMIT_ACK  0x5
+#define KVM_BLK_CMD_FT          0x6
+#define KVM_BLK_CMD_ISSUE       0x7
+
+enum CUJU_FT_MODE {
+    CUJU_FT_ERROR = -1,
+    CUJU_FT_OFF,
+    CUJU_FT_INIT,                    // 1
+    CUJU_FT_TRANSACTION_PRE_RUN,
+    CUJU_FT_TRANSACTION_ITER,
+    CUJU_FT_TRANSACTION_ATOMIC,
+    CUJU_FT_TRANSACTION_RECV,        // 5
+    CUJU_FT_TRANSACTION_HANDOVER,
+    CUJU_FT_TRANSACTION_SPECULATIVE,
+    CUJU_FT_TRANSACTION_FLUSH_OUTPUT,
+    CUJU_FT_TRANSACTION_TRANSFER,
+    CUJU_FT_TRANSACTION_SNAPSHOT,    // 10
+    CUJU_FT_TRANSACTION_RUN,
+};
+
+#endif
+
+void cuju_ft_ipc_epoch_timer(unsigned int epoch_id)
+{
+    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id , CUJU_FT_TRANSACTION_RUN);
+}
+
+void cuju_ft_ipc_epoch_commit(unsigned int epoch_id)
+{
+    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_FLUSH_OUTPUT);
+}
+
+void cuju_ft_ipc_notify_ft(unsigned int epoch_id)
+{
+    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_HANDOVER);
+}
+
+struct proto_ipc ipc_proto;
+int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode)
+{
+    int ret = 0;
+    
+    static unsigned int count = 0;
+
+    ipc_proto.ipc_mode = IPC_CUJU;
+    ipc_proto.ephch_id = epoch_id;
+    ipc_proto.cuju_ft_mode = cuju_ft_mode;
+    ipc_proto.transmit_cnt++;
+
+    printf("FD is %d Size:%lu Count:%d\n", ipc_fd, sizeof(struct proto_ipc), count++);
+
+    ret = send(ipc_fd, &ipc_proto, sizeof(struct proto_ipc), 0);
+
+    if (ret < 0)
+        printf("Error\n");
+
+    return ret;
 }

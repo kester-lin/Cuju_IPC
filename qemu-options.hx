@@ -4068,6 +4068,14 @@ contents of @code{iv.b64} to the second secret
 
 ETEXI
 
+DEF("haproxy-ipc", HAS_ARG, QEMU_OPTION_haproxy_ipc, \
+    "-haproxy-ipc ip:port specify the HAProxy IPC server and port\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -haproxy-ipc @var{ipnport}
+@findex -haproxy-ipc
+specify the HAProxy IPC server and port, ip and port is @var{ipnport}.
+ETEXI
 
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI
