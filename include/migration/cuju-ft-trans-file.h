@@ -66,6 +66,32 @@ typedef int (CujuFtTransGetReadyFunc)(void *opaque);
 typedef void (CujuFtTransWaitForUnfreezeFunc)(void *opaque);
 typedef int (CujuFtTransCloseFunc)(void *opaque);
 
+
+/* ipc_mode */
+extern char *haproxy_ipc;
+
+#define IPC_PACKET_CNT 1
+#define IPC_PACKET_SIZE 2
+#define IPC_TIME 3
+#define IPC_SIGNAL 4
+#define IPC_CUJU 5
+
+/* IPC PROTO */
+struct proto_ipc
+{
+    uint32_t transmit_cnt;
+    uint32_t ipc_mode:8;
+    uint32_t cuju_ft_mode:8;
+    uint32_t gft_id:16;
+    uint32_t ephch_id;
+    uint32_t packet_cnt:16;
+    uint32_t packet_size:16;
+    uint32_t time_interval;
+    uint32_t nic_count:16;
+    uint32_t conn_count:16;
+    unsigned char *conn_info;
+};
+
 /* a list of buf to be sent */
 struct cuju_buf_desc {
     void *opaque;
@@ -208,5 +234,12 @@ extern QemuCond cuju_load_cond;
 void cuju_socket_set_nodelay(int fd);
 void cuju_socket_unset_nodelay(int fd);
 void cuju_socket_set_quickack(int fd);
+
+int cuju_ft_init(const char *p);
+int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode);
+void cuju_ft_ipc_epoch_timer(unsigned int epoch_id);
+void cuju_ft_ipc_epoch_commit(unsigned int epoch_id);
+void cuju_ft_ipc_notify_ft(unsigned int epoch_id);
+
 
 #endif

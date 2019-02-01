@@ -4066,6 +4066,10 @@ int main(int argc, char **argv, char **envp)
                     exit(1);
                 }
                 break;
+            case QEMU_OPTION_haproxy_ipc:
+                haproxy_ipc = (char *)optarg;
+                printf("Using HAProxy IPC\n");
+                break;    
             default:
                 os_parse_cmd_args(popt->index, optarg);
             }
@@ -4517,6 +4521,13 @@ int main(int argc, char **argv, char **envp)
     default_drive(default_sdcard, snapshot, IF_SD, 0, SD_OPTS);
 
     parse_numa_opts(machine_class);
+
+    if (haproxy_ipc) {
+        int ret = cuju_ft_init(haproxy_ipc);
+        printf("HAProxy IPC init\n");
+        if (ret < 0)
+            exit(ret);
+    }
 
     if (qemu_opts_foreach(qemu_find_opts("mon"),
                           mon_init_func, NULL, NULL)) {
