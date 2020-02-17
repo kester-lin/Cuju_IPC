@@ -333,6 +333,12 @@ void vmstate_save_state(QEMUFile *f, const VMStateDescription *vmsd,
                 n_elems = vdev->size;
             }
 
+            if(strcmp(field->name,"vq")==0 && kvmft_started()){
+                VirtIODevice *vdev;
+                vdev = opaque;
+                n_elems = vdev->size;
+            }
+
             for (i = 0; i < n_elems; i++) {
                 void *addr = base_addr + size * i;
 

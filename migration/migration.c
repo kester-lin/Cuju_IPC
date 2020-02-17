@@ -184,6 +184,8 @@ static int migration_states_current;
 unsigned int g_epoch_id = 0;
 
 static void migrate_fd_get_notify(void *opaque);
+
+static void migrate_fd_get_notify(void *opaque);
 static void cuju_migrate_cancel_discon(void *opaque);
 static void cuju_migrate_cancel_con(void *opaque);
 int cuju_get_fd_from_QIOChannel(QIOChannel *ioc);
