@@ -214,6 +214,7 @@ enum xen_mode xen_mode = XEN_EMULATE;
 int ft_join_port = 5000;
 int my_gft_id = -1;
 int ft_ram_conn_count = 1;
+unsigned int transmit_arp = 0; 
 
 static int has_defaults = 1;
 static int default_serial = 1;
@@ -1935,6 +1936,12 @@ static bool main_loop_should_exit(void)
         qemu_system_suspend();
     }
     if (qemu_shutdown_requested()) {
+
+        if(haproxy_ipc) {
+            //close fd
+            haproxy_ipc = NULL;
+        }
+
         qemu_kill_report();
         qapi_event_send_shutdown(&error_abort);
         if (no_shutdown) {
@@ -3034,8 +3041,8 @@ int main(int argc, char **argv, char **envp)
     const char *qtest_chrdev = NULL;
     const char *qtest_log = NULL;
     const char *pid_file = NULL;
-    const char *incoming = NULL;
     
+  
     bool defconfig = true;
     bool userconfig = true;
     bool nographic = false;
@@ -3934,7 +3941,7 @@ int main(int argc, char **argv, char **envp)
                 if (!incoming) {
                     runstate_set(RUN_STATE_INMIGRATE);
                 }
-                incoming = optarg;
+                incoming = (char *)optarg;
                 break;
             case QEMU_OPTION_nodefaults:
                 has_defaults = 0;
@@ -4522,13 +4529,7 @@ int main(int argc, char **argv, char **envp)
 
     parse_numa_opts(machine_class);
 
-    if (haproxy_ipc) {
-        int ret = cuju_ft_init(haproxy_ipc);
-        printf("HAProxy IPC init\n");
-        if (ret < 0)
-            exit(ret);
-    }
-
+   
     if (qemu_opts_foreach(qemu_find_opts("mon"),
                           mon_init_func, NULL, NULL)) {
         exit(1);
@@ -4732,6 +4733,9 @@ int main(int argc, char **argv, char **envp)
 	printf("VM init finished\n");
 
     main_loop();
+    
+    printf("VM Start Close finished\n");
+
     replay_disable_events();
     iothread_stop_all();
 
@@ -4746,4 +4750,23 @@ int main(int argc, char **argv, char **envp)
     qemu_chr_cleanup();
 
     return 0;
+}
+
+/* DATGG : vhost stop or start - definition */
+void cuju_vhost_vm_state_notify(int running, int state)
+{
+#if 0
+#else
+        //printf("PRINTGG : cuju_vhost_vm_state_notify : %d, %d\n", running, state);
+        VMChangeStateEntry *e, *next;
+
+        trace_vm_state_notify(running, state);
+
+        QLIST_FOREACH_SAFE(e, &vm_change_state_head, entries, next) {
+                if(get_cuju_vhost_addr() == e->opaque)
+                        e->cb(e->opaque, running, state);
+                else
+                        continue;
+        }
+#endif
 }

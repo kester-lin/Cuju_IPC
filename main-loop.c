@@ -31,6 +31,7 @@
 #include "slirp/libslirp.h"
 #include "qemu/main-loop.h"
 #include "block/aio.h"
+#include "migration/cuju-ft-trans-file.h"
 
 #ifndef _WIN32
 

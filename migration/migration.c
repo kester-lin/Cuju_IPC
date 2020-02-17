@@ -1498,6 +1498,13 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
     if(cuju)
         printf("Enter FT mode\n");
 
+    if (haproxy_ipc && !incoming) {
+        int ret = cuju_ftproxy_init(haproxy_ipc, 0);
+        printf("HAProxy IPC init\n");
+        if (ret < 0)
+            exit(ret);
+    }
+
     if (migration_is_setup_or_active(s->state) ||
         s->state == MIGRATION_STATUS_CANCELLING ||
         s->state == MIGRATION_STATUS_COLO) {
@@ -2582,6 +2589,9 @@ static void *migration_thread(void *opaque)
 		printf("Start system memory backup\n");
 		migration_completion(s, current_active_state,
                &old_vm_running, &start_time);
+        
+        /* DATGG : vhost get device - init */
+		INIT_CUJU_VHOST();       
 	}
 
     while (s->state == MIGRATION_STATUS_ACTIVE ||
@@ -2894,6 +2904,7 @@ static void cuju_ft_trans_incoming(void *opaque)
     qemu_file_get_notify(f);
     if (qemu_file_get_error(f)) {
         count++;
+        printf("Ready to Backup\n");
         cuju_ft_mode = CUJU_FT_ERROR;
         //printf("in qemu_file_get_error\n");
         if(s->check)
@@ -2998,6 +3009,11 @@ static void migrate_run(MigrationState *s)
     cuju_qemu_set_last_cmd(s->file, CUJU_QEMU_VM_TRANSACTION_BEGIN);
 
     qemu_iohandler_ft_pause(false);
+
+	/* DATGG : vhost - vm start */
+	cuju_vhost_vm_state_notify(1, 9);
+	/* ------------------------ */
+
     vm_start_mig();
 
     s->run_real_start_time = time_in_double();
@@ -3017,7 +3033,7 @@ static void migrate_timer(void *opaque)
     assert(s == migrate_get_current());
 
 #ifndef ft_debug_mode_enable
-    if ((trans_serial & 0x03f) == 0) {
+    if ((trans_serial & 0xFFF) == 0) {
         printf("\n%s tick %lu\n", __func__, trans_serial);
     }
 #else
@@ -3031,6 +3047,11 @@ static void migrate_timer(void *opaque)
 
     qemu_mutex_lock_iothread();
     vm_stop_mig();
+
+	/* DATGG : vhost - vm stop */
+	cuju_vhost_vm_state_notify(0, 7);
+	/* ----------------------- */
+
     qemu_iohandler_ft_pause(true);
 
     if (haproxy_ipc)
@@ -3107,4 +3128,34 @@ void kvmft_tick_func(void)
         return;
 
     ft_tick_func();
+}
+
+/* DATGG : vhost get device - definition */
+bool CUJU_GET_VHOST;
+void *CUJU_VHOST_ADDR;
+
+void INIT_CUJU_VHOST(void)
+{
+        CUJU_GET_VHOST = false;
+        CUJU_VHOST_ADDR = NULL;
+}
+
+void set_cuju_get_vhost(bool n)
+{
+        CUJU_GET_VHOST = n;
+}
+
+void set_cuju_vhost_addr(void *addr)
+{
+        CUJU_VHOST_ADDR = addr;
+}
+
+bool get_cuju_get_vhost(void)
+{
+        return CUJU_GET_VHOST;
+}
+
+void *get_cuju_vhost_addr(void)
+{
+        return CUJU_VHOST_ADDR;
 }
