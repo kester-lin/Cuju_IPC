@@ -489,5 +489,13 @@ void dirty_page_tracking_logs_commit(MigrationState *s);
 unsigned int dirty_page_tracking_logs_max(int bound_ms);
 
 void kvmft_tick_func(void);
+/* DATGG : vhost stop or start - declaration */
+void cuju_vhost_vm_state_notify(int, int);
+/* DATGG : vhost get device - declaration */
+void INIT_CUJU_VHOST(void);
+void set_cuju_get_vhost(bool);
+void set_cuju_vhost_addr(void*);
+bool get_cuju_get_vhost(void); 
+void *get_cuju_vhost_addr(void);
 
 #endif

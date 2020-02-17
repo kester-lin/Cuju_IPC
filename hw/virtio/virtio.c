@@ -1010,7 +1010,7 @@ static int virtio_validate_features(VirtIODevice *vdev)
         return 0;
     }
 }
-
+#if 0
 int virtio_set_status(VirtIODevice *vdev, uint8_t val)
 {
     VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
@@ -1032,6 +1032,36 @@ int virtio_set_status(VirtIODevice *vdev, uint8_t val)
     vdev->status = val;
     return 0;
 }
+#else
+int virtio_set_status(VirtIODevice *vdev, uint8_t val)
+{
+	/* DATGG : vhost get device - get vhost addr */
+        if((strncmp(vdev->name, "virtio-net", 10) == 0) && 
+           !get_cuju_get_vhost()) {
+                set_cuju_get_vhost(true);
+                set_cuju_vhost_addr(vdev);
+        }
+	
+	VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
+	trace_virtio_set_status(vdev, val);
+
+	if (virtio_vdev_has_feature(vdev, VIRTIO_F_VERSION_1)) {
+		if (!(vdev->status & VIRTIO_CONFIG_S_FEATURES_OK) &&
+		    val & VIRTIO_CONFIG_S_FEATURES_OK) {
+            		int ret = virtio_validate_features(vdev);
+
+			if (ret) {
+                		return ret;
+            		}
+        	}
+    	}   
+	if (k->set_status) {
+		k->set_status(vdev, val);
+	}    
+	vdev->status = val; 
+	return 0;
+}
+#endif
 
 bool target_words_bigendian(void);
 static enum virtio_device_endian virtio_default_endian(void)
@@ -1775,6 +1805,8 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
         }
     }
 
+    vdev->size = i;
+
     if (vdc->save != NULL) {
         vdc->save(vdev, f);
     }
@@ -2410,3 +2442,5 @@ static void virtio_register_types(void)
 }
 
 type_init(virtio_register_types)
+
+

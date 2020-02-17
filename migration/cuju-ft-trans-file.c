@@ -33,6 +33,7 @@
 #include "io/channel-socket.h"
 #include <linux/kvm.h>
 #include "migration/migration.h"
+#include "net/net.h"
 
 static QemuMutex *cuju_buf_desc_mutex = NULL;
 static QemuCond *cuju_buf_desc_cond = NULL;
@@ -46,11 +47,22 @@ extern void kvm_shmem_load_ram_with_hdr(void *buf, int size, void *hdr_buf, int 
 
 char *blk_server = NULL;
 char *haproxy_ipc = NULL;
+char *incoming = NULL;
 static int ipc_fd = 0;
 
 static CujuQEMUFileFtTrans **cuju_ft_trans;
 static int cuju_ft_trans_count;
 static int cuju_ft_trans_current_index;
+
+#define tr_debug_mode_enable 0
+#if tr_debug_mode_enable
+#define TRPRINTF(fmt, ...) \
+    do { printf(fmt, ## __VA_ARGS__); } while (0)
+#else
+#define TRPRINTF(fmt, ...) \
+    do { } while (0)
+#endif
+
 
 static CujuQEMUFileFtTrans *cuju_ft_trans_get_next(CujuQEMUFileFtTrans *s)
 {
@@ -805,6 +817,11 @@ static int cuju_ft_trans_close(void *opaque)
         qemu_announce_self();
 
         cuju_ft_mode = CUJU_FT_TRANSACTION_HANDOVER;
+
+        if (haproxy_ipc)
+            cuju_ftproxy_init(haproxy_ipc, 1);
+        //cuju_ft_ipc_notify_ft(0x0);
+        
         vm_start();
         printf("%s vm_started.\n", __func__);
     }
@@ -1276,9 +1293,10 @@ void qmp_cuju_failover(Error **errp)
 }
 
 
-int cuju_ft_init(const char *p)
+int cuju_ftproxy_init(const char *p, int failover)
 {
     Error *err = NULL;
+    int flags = 0;
 
     SocketAddress* sa = socket_parse(p, &err);
 
@@ -1288,10 +1306,20 @@ int cuju_ft_init(const char *p)
     
     ipc_fd = socket_connect(sa, &err, NULL, NULL);
 
+    flags = fcntl(ipc_fd, F_GETFL, 0);
+    fcntl(ipc_fd, F_SETFL, flags|O_NONBLOCK);
+
     if (err) {
         printf("Can't connect to HAProxy IPC server\n");
         error_report_err(err);
         return -1;
+    }
+
+    if (failover) {
+        cuju_ft_ipc_notify_ft(0);
+    }
+    else {
+        cuju_ft_ipc_init_info(0);
     }
 
     printf("Connect to HAProxy IPC server\n");
@@ -1307,15 +1335,17 @@ int cuju_ft_init(const char *p)
 /* IPC PROTO */
 struct proto_ipc
 {
-    unsigned int ipc_mode:8;
-    unsigned int cuju_ft_mode:8;
-    unsigned int gft_id:16;
-    unsigned int ephch_id;
-    unsigned int packet_cnt:16;
-    unsigned int packet_size:16;
-    unsigned int time_interval;
-    unsigned int nic_count:16;
-    unsigned int conn_count:16;
+    uint32_t transmit_cnt;
+    uint32_t ipc_mode:8;
+    uint32_t cuju_ft_arp:2;
+    uint32_t cuju_ft_mode:6;
+    uint32_t gft_id:16;
+    uint32_t ephch_id;
+    uint32_t packet_cnt:16;
+    uint32_t packet_size:16;
+    uint32_t time_interval;
+    uint32_t nic_count:16;
+    uint32_t conn_count:16;
     unsigned char *conn_info;
 };
 #define KVM_BLK_CMD_READ        0x1
@@ -1346,6 +1376,7 @@ enum CUJU_FT_MODE {
 
 void cuju_ft_ipc_epoch_timer(unsigned int epoch_id)
 {
+
     cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id , CUJU_FT_TRANSACTION_RUN);
 }
 
@@ -1359,24 +1390,245 @@ void cuju_ft_ipc_notify_ft(unsigned int epoch_id)
     cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_HANDOVER);
 }
 
-struct proto_ipc ipc_proto;
+void cuju_ft_ipc_init_info(unsigned int epoch_id)
+{
+    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_INIT);
+}
+
+
+FILE *arp_proc = NULL;
+uint8_t ipc_array[DEFAULT_IPC_ARRAY];
+uint8_t ipc_sub_ip[(IP_LENGTH*DEFAULT_NIC_CNT)];
+uint32_t epoch_id_arp_time = 0;
+char* mac_ip;
+uint32_t main_machex = 0;
+
+int cuju_ft_ipc_open_arp_file(void)
+{
+    if (!(arp_proc = fopen("/proc/net/arp", "r"))) {
+        return 1;
+    }
+    return 0;
+}
+
+void cuju_ft_ipc_close_arp_file(void)
+{
+    if (arp_proc != NULL)
+        fclose(arp_proc);
+}
+
+uint32_t parseIPV4string(char* str) 
+{
+    unsigned char value[4] = {0};
+    size_t index = 0;
+
+#if tr_debug_mode_enable
+    char *str2 = NULL;
+
+    str2 = str; /* save the pointer */    
+#endif
+
+    while (*str) {
+        if (isdigit((unsigned char)*str)) {
+            value[index] *= 10;
+            value[index] += *str - '0';
+        } else {
+            index++;
+        }
+        str++;
+    }
+
+#if tr_debug_mode_enable    
+    TRPRINTF("values in \"%s\": %d %d %d %d\n", str2,
+              value[0], value[1], value[2], value[3]);
+#endif
+
+    return (value[0] << 24)| (value[1] << 16) | (value[2] << 8) | value[3];
+}
+
 int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode)
 {
     int ret = 0;
-    
-    static unsigned int count = 0;
+    struct proto_ipc* ipc_proto;
+    char* mac_ip;
+    char macaddr[18];
+    uint32_t machex = 0;
 
-    ipc_proto.ipc_mode = IPC_CUJU;
-    ipc_proto.ephch_id = epoch_id;
-    ipc_proto.cuju_ft_mode = cuju_ft_mode;
-    ipc_proto.transmit_cnt++;
+    ipc_proto = (struct proto_ipc*)ipc_array;
 
-    printf("FD is %d Size:%lu Count:%d\n", ipc_fd, sizeof(struct proto_ipc), count++);
+    ipc_proto->ipc_mode = IPC_CUJU;
+    ipc_proto->epoch_id = epoch_id;
+    ipc_proto->flush_id = epoch_id;
+    ipc_proto->cuju_ft_mode = cuju_ft_mode;
+    ipc_proto->nic_count = nb_nics;
 
-    ret = send(ipc_fd, &ipc_proto, sizeof(struct proto_ipc), 0);
+    if (cuju_ft_mode == CUJU_FT_TRANSACTION_RUN) {
+        ipc_proto->epoch_id = epoch_id;
+    }
+    else if (cuju_ft_mode == CUJU_FT_TRANSACTION_FLUSH_OUTPUT) {
+        ipc_proto->flush_id = epoch_id;
+    }
+
+
+    //if ((cuju_ft_mode == CUJU_FT_INIT) || (epoch_id  > epoch_id_arp_time + 200)) {
+    if (cuju_ft_mode == CUJU_FT_INIT || cuju_ft_mode == CUJU_FT_TRANSACTION_HANDOVER) {
+       
+        TRPRINTF("NIC count %d\n", nb_nics);
+
+#if ENABLE_LOOP_SEND_IP   
+        /* ignore IP changed case */
+        if ((epoch_id  > epoch_id_arp_time + 200)) {
+            ipc_proto->cuju_ft_arp = 1;
+        }
+#endif
+
+        if (nb_nics > DEFAULT_NIC_CNT) {
+            assert(1);
+        }
+        else {
+            for(int idx = 0; idx < nb_nics; idx++) {
+//get_arp:
+            	snprintf(macaddr, sizeof(macaddr),"%02x:%02x:%02x:%02x:%02x:%02x",
+				        nd_table[idx].macaddr.a[0], nd_table[idx].macaddr.a[1],
+                        nd_table[idx].macaddr.a[2], nd_table[idx].macaddr.a[3],
+                        nd_table[idx].macaddr.a[4], nd_table[idx].macaddr.a[5]
+                        );
+				mac_ip = arp_get_ip(macaddr);
+						
+				if (mac_ip == NULL) {
+					TRPRINTF("Find IP NULL\n");
+                    //goto get_arp;
+                }
+                else { 
+					TRPRINTF("Find IP %s\n", mac_ip);            
+                    machex = parseIPV4string(mac_ip);
+                    TRPRINTF("Find IP HEX %08x\n", machex);
+                    if (machex)
+                        main_machex = machex;
+                    
+
+                    ipc_proto->nic[idx] = machex;
+                    //memcpy(ipc_proto->nic[idx], &machex, sizeof(machex));
+                    //memcpy((void *)&ipc_array[sizeof(struct proto_ipc) + (idx * IP_LENGTH)], &machex, sizeof(machex));                  
+                }
+            }
+        }
+#if ENABLE_LOOP_SEND_IP        
+        epoch_id_arp_time = epoch_id;
+#endif
+    }
+
+//    else {
+//        memcpy((void *)&ipc_array[sizeof(struct proto_ipc)], &main_machex, sizeof(main_machex));  
+//    }
+    TRPRINTF("send IPC packet\n");
+    ret = send(ipc_fd, &ipc_array, sizeof(ipc_array), 0);
+
+    //memset(ipc_array, 0x0, sizeof(ipc_array));
+
+    memset(&ipc_proto->conn, 0x00, TOTAL_CONN*CONNECTION_LENGTH);
+
+    TRPRINTF("sizeof ipc_array %lu\n", sizeof(ipc_array));
+
+    if (ret < 0)
+        TRPRINTF("Error\n");
+
+    return ret;
+}
+
+#if ENABLE_LOOP_SEND_IP 
+int cuju_ft_ipc_send_time_trig(char* addr)
+{
+    int ret = 0;
+    struct proto_ipc* ipc_proto;
+    char* mac_ip;
+    char macaddr[18];
+    uint32_t machex = 0;
+#if!SEND_SAME_IP   
+    static uint32_t last_machex = 0;
+#endif
+    ipc_proto = (struct proto_ipc*)ipc_array;
+
+    ipc_proto->ipc_mode = IPC_CUJU;
+    ipc_proto->nic_count = nb_nics;
+    ipc_proto->cuju_ft_arp = 1;
+
+    TRPRINTF("NIC count %d\n", nb_nics);
+
+    if (nb_nics > DEFAULT_NIC_CNT) {
+        
+    }
+    else {
+        for(int idx = 0; idx < nb_nics; idx++) {
+
+        	sprintf(macaddr, "%02x:%02x:%02x:%02x:%02x:%02x",
+                    nd_table[idx].macaddr.a[0], nd_table[idx].macaddr.a[1],
+                    nd_table[idx].macaddr.a[2], nd_table[idx].macaddr.a[3],
+                    nd_table[idx].macaddr.a[4], nd_table[idx].macaddr.a[5]);
+            
+            mac_ip = arp_get_ip(macaddr);
+		
+            if (mac_ip == NULL) {
+	            TRPRINTF("Find IP NULL\n");
+            }
+            else { 
+	            TRPRINTF("Find IP %s\n", mac_ip);            
+                machex = parseIPV4string(mac_ip);
+                TRPRINTF("Find IP HEX %08x\n", machex);
+#if !SEND_SAME_IP
+                if (last_machex == machex) {
+                    TRPRINTF("IP No Change\n");
+                    return 0;
+                }
+
+                last_machex = machex;
+#endif   
+                memcpy((void *)&ipc_sub_ip[idx * IP_LENGTH])
+                memcpy((void *)&ipc_array[sizeof(struct proto_ipc) + (idx * IP_LENGTH)], &machex, sizeof(machex));
+            }
+        }
+    }
+
+    //printf("FD is %d Size:%lu Count:%d\n", ipc_fd, sizeof(struct proto_ipc), count++);
+
+    ret = send(ipc_fd, &ipc_array, sizeof(ipc_array), 0);
+
+    memset(ipc_array, 0x0, sizeof(ipc_array));
+
+    TRPRINTF("sizeof ipc_array %lu\n", sizeof(ipc_array));
 
     if (ret < 0)
         printf("Error\n");
 
     return ret;
+}
+#endif
+
+char *arp_get_ip(const char *req_mac)
+{
+    FILE           *proc;
+	 char ip[16];
+	 char mac[18];
+	 char * reply = NULL;
+ 
+    if (!(proc = fopen("/proc/net/arp", "r"))) {
+        return NULL;
+    }
+ 
+    /* Skip first line */
+	while (!feof(proc) && fgetc(proc) != '\n');
+ 
+	 /* Find ip, copy mac in reply */
+	reply = NULL;
+    while (!feof(proc) && (fscanf(proc, " %15[0-9.] %*s %*s %17[A-Fa-f0-9:] %*s %*s", ip, mac) == 2)) {
+		  if (strcmp(mac, req_mac) == 0) {
+				//reply = safe_strdup(ip);
+				reply = strdup(ip);
+				break;
+		  }
+    }
+ 
+    fclose(proc);
+ 
+    return reply;
 }

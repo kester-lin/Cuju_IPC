@@ -60,6 +60,7 @@ typedef int (CujuFtTransCloseFunc)(void *opaque);
 
 /* ipc_mode */
 extern char *haproxy_ipc;
+extern char *incoming;
 
 #define IPC_PACKET_CNT 1
 #define IPC_PACKET_SIZE 2
@@ -67,20 +68,35 @@ extern char *haproxy_ipc;
 #define IPC_SIGNAL 4
 #define IPC_CUJU 5
 
+#define SEND_SAME_IP 1
+#define IP_LENGTH 4
+#define DEFAULT_NIC_CNT 3
+#define CONNECTION_LENGTH 12
+#define DEFAULT_CONN_CNT 3
+#define TOTAL_NIC   8
+#define TOTAL_CONN   8
+//#define DEFAULT_IPC_ARRAY  (24 + (IP_LENGTH*DEFAULT_NIC_CNT) + (CONNECTION_LENGTH * DEFAULT_CONN_CNT))
+
+#define DEFAULT_IPC_ARRAY  (20 + (IP_LENGTH*TOTAL_NIC) + (CONNECTION_LENGTH * TOTAL_CONN))
+
+
+
 /* IPC PROTO */
 struct proto_ipc
 {
-    uint32_t transmit_cnt;
     uint32_t ipc_mode:8;
-    uint32_t cuju_ft_mode:8;
+    uint32_t cuju_ft_arp:2;
+    uint32_t cuju_ft_mode:6;
     uint32_t gft_id:16;
-    uint32_t ephch_id;
+    uint32_t epoch_id;
+    uint32_t flush_id;
     uint32_t packet_cnt:16;
     uint32_t packet_size:16;
     uint32_t time_interval;
     uint32_t nic_count:16;
     uint32_t conn_count:16;
-    unsigned char *conn_info;
+    unsigned int nic[TOTAL_NIC];
+    unsigned char conn[TOTAL_CONN][CONNECTION_LENGTH];   
 };
 
 /* a list of buf to be sent */
@@ -103,6 +119,7 @@ typedef struct CujuFtTransHdr
 } CujuFtTransHdr;
 
 #define CUJU_FT_HDR_MAGIC    0xa5a6a7a8
+#define ENABLE_LOOP_SEND_IP 0
 
 typedef struct CujuQEMUFileFtTrans
 {
@@ -225,11 +242,18 @@ void cuju_socket_set_nodelay(int fd);
 void cuju_socket_unset_nodelay(int fd);
 void cuju_socket_set_quickack(int fd);
 
-int cuju_ft_init(const char *p);
+int cuju_ftproxy_init(const char *p, int failover);
 int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode);
 void cuju_ft_ipc_epoch_timer(unsigned int epoch_id);
 void cuju_ft_ipc_epoch_commit(unsigned int epoch_id);
 void cuju_ft_ipc_notify_ft(unsigned int epoch_id);
-
-
+void cuju_ft_ipc_notify_failover(void);
+void cuju_ft_ipc_init_info(unsigned int epoch_id);
+#if ENABLE_LOOP_SEND_IP 
+int cuju_ft_ipc_send_time_trig(char* addr);
+#endif
+int cuju_ft_ipc_open_arp_file(void);
+void cuju_ft_ipc_close_arp_file(void);
+char *arp_get_ip(const char *req_mac);
+uint32_t parseIPV4string(char* str);
 #endif

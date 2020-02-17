@@ -1224,6 +1224,13 @@ static void virtio_net_tx_complete(NetClientState *nc, ssize_t len)
     virtio_net_flush_tx(q);
 }
 
+static inline void print_time(const char *s)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	printf("%s: %d.%d\n", s, (int)tv.tv_sec, (int)tv.tv_usec);
+} 
+
 /* TX */
 static int32_t virtio_net_flush_tx(VirtIONetQueue *q)
 {
@@ -1304,7 +1311,10 @@ static int32_t virtio_net_flush_tx(VirtIONetQueue *q)
         ret = qemu_sendv_packet_async(qemu_get_subqueue(n->nic, queue_index),
                                       out_sg, out_num, virtio_net_tx_complete);
         //ret = qemu_sendv_packet_async_proxy(qemu_get_subqueue(n->nic, queue_index),
-        //                              out_sg, out_num, virtio_net_tx_complete);
+        //                                    out_sg, out_num, virtio_net_tx_complete);
+
+        ////print_time(__func__);
+
         if (ret == 0) {
             virtio_queue_set_notification(q->tx_vq, 0);
             q->async_tx.elem = elem;
