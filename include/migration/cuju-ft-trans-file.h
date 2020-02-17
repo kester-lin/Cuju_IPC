@@ -252,18 +252,18 @@ void cuju_socket_set_nodelay(int fd);
 void cuju_socket_unset_nodelay(int fd);
 void cuju_socket_set_quickack(int fd);
 
-int cuju_ftproxy_init(const char *p, int failover);
-int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode);
-void cuju_ft_ipc_epoch_timer(unsigned int epoch_id);
-void cuju_ft_ipc_epoch_commit(unsigned int epoch_id);
-void cuju_ft_ipc_notify_ft(unsigned int epoch_id);
-void cuju_ft_ipc_notify_failover(void);
-void cuju_ft_ipc_init_info(unsigned int epoch_id);
+int cuju_proxy_init(const char *p, int failover);
+int cuju_proxy_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode);
+void cuju_proxy_ipc_epoch_timer(unsigned int epoch_id);
+void cuju_proxy_ipc_epoch_commit(unsigned int epoch_id);
+void cuju_proxy_ipc_notify_ft(unsigned int epoch_id);
+void cuju_proxy_ipc_notify_failover(void);
+void cuju_proxy_ipc_init_info(unsigned int epoch_id);
 #if ENABLE_LOOP_SEND_IP 
-int cuju_ft_ipc_send_time_trig(char* addr);
+int cuju_proxy_ipc_send_time_trig(char* addr);
 #endif
-int cuju_ft_ipc_open_arp_file(void);
-void cuju_ft_ipc_close_arp_file(void);
+int cuju_proxy_ipc_open_arp_file(void);
+void cuju_proxy_ipc_close_arp_file(void);
 char *arp_get_ip(const char *req_mac);
 uint32_t parseIPV4string(char* str);
 #endif

@@ -184,8 +184,6 @@ static int migration_states_current;
 unsigned int g_epoch_id = 0;
 
 static void migrate_fd_get_notify(void *opaque);
-
-static void migrate_fd_get_notify(void *opaque);
 static void cuju_migrate_cancel_discon(void *opaque);
 static void cuju_migrate_cancel_con(void *opaque);
 int cuju_get_fd_from_QIOChannel(QIOChannel *ioc);
@@ -1501,7 +1499,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
         printf("Enter FT mode\n");
 
     if (haproxy_ipc && !incoming) {
-        int ret = cuju_ftproxy_init(haproxy_ipc, 0);
+        int ret = cuju_proxy_init(haproxy_ipc, 0);
         printf("HAProxy IPC init\n");
         if (ret < 0)
             exit(ret);
@@ -2374,7 +2372,7 @@ static void kvmft_flush_output(MigrationState *s)
 	*/
 
     if (haproxy_ipc)
-        cuju_ft_ipc_epoch_commit(g_epoch_id);
+        cuju_proxy_ipc_epoch_commit(g_epoch_id);
 
     virtio_blk_commit_temp_list(s->virtio_blk_temp_list);
     s->virtio_blk_temp_list = NULL;
@@ -2698,7 +2696,7 @@ static void *migration_thread(void *opaque)
 		//memory_global_dirty_log_start();  //For debug
 
         if(haproxy_ipc)
-            cuju_ft_ipc_notify_ft(g_epoch_id);
+            cuju_proxy_ipc_notify_ft(g_epoch_id);
 
         kvm_shmem_start_ft();
 
@@ -3057,7 +3055,7 @@ static void migrate_timer(void *opaque)
     qemu_iohandler_ft_pause(true);
 
     if (haproxy_ipc)
-        cuju_ft_ipc_epoch_timer(++g_epoch_id);
+        cuju_proxy_ipc_epoch_timer(++g_epoch_id);
 
 
     s->flush_vs_commit1 = false;

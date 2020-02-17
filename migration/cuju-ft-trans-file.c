@@ -71,7 +71,6 @@ static void uninit_time(void)
     do { } while (0)
 #endif
 
-
 static CujuQEMUFileFtTrans *cuju_ft_trans_get_next(CujuQEMUFileFtTrans *s)
 {
     int index = s->index;
@@ -856,8 +855,8 @@ static int cuju_ft_trans_close(void *opaque)
         cuju_ft_mode = CUJU_FT_TRANSACTION_HANDOVER;
 
         if (haproxy_ipc)
-            cuju_ftproxy_init(haproxy_ipc, 1);
-        //cuju_ft_ipc_notify_ft(0x0);
+            cuju_proxy_init(haproxy_ipc, 1);
+        //cuju_proxy_ipc_notify_ft(0x0);
         
         vm_start();
         printf("%s vm_started.\n", __func__);
@@ -1331,7 +1330,7 @@ void qmp_cuju_failover(Error **errp)
 }
 
 
-int cuju_ftproxy_init(const char *p, int failover)
+int cuju_proxy_init(const char *p, int failover)
 {
     Error *err = NULL;
     int flags = 0;
@@ -1354,10 +1353,10 @@ int cuju_ftproxy_init(const char *p, int failover)
     }
 
     if (failover) {
-        cuju_ft_ipc_notify_ft(0);
+        cuju_proxy_ipc_notify_ft(0);
     }
     else {
-        cuju_ft_ipc_init_info(0);
+        cuju_proxy_ipc_init_info(0);
     }
 
     printf("Connect to HAProxy IPC server\n");
@@ -1412,25 +1411,25 @@ enum CUJU_FT_MODE {
 
 #endif
 
-void cuju_ft_ipc_epoch_timer(unsigned int epoch_id)
+void cuju_proxy_ipc_epoch_timer(unsigned int epoch_id)
 {
 
-    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id , CUJU_FT_TRANSACTION_RUN);
+    cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id , CUJU_FT_TRANSACTION_RUN);
 }
 
-void cuju_ft_ipc_epoch_commit(unsigned int epoch_id)
+void cuju_proxy_ipc_epoch_commit(unsigned int epoch_id)
 {
-    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_FLUSH_OUTPUT);
+    cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_FLUSH_OUTPUT);
 }
 
-void cuju_ft_ipc_notify_ft(unsigned int epoch_id)
+void cuju_proxy_ipc_notify_ft(unsigned int epoch_id)
 {
-    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_HANDOVER);
+    cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_HANDOVER);
 }
 
-void cuju_ft_ipc_init_info(unsigned int epoch_id)
+void cuju_proxy_ipc_init_info(unsigned int epoch_id)
 {
-    cuju_ft_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_INIT);
+    cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_INIT);
 }
 
 
@@ -1441,7 +1440,7 @@ uint32_t epoch_id_arp_time = 0;
 char* mac_ip;
 uint32_t main_machex = 0;
 
-int cuju_ft_ipc_open_arp_file(void)
+int cuju_proxy_ipc_open_arp_file(void)
 {
     if (!(arp_proc = fopen("/proc/net/arp", "r"))) {
         return 1;
@@ -1449,7 +1448,7 @@ int cuju_ft_ipc_open_arp_file(void)
     return 0;
 }
 
-void cuju_ft_ipc_close_arp_file(void)
+void cuju_proxy_ipc_close_arp_file(void)
 {
     if (arp_proc != NULL)
         fclose(arp_proc);
@@ -1484,7 +1483,7 @@ uint32_t parseIPV4string(char* str)
     return (value[0] << 24)| (value[1] << 16) | (value[2] << 8) | value[3];
 }
 
-int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode)
+int cuju_proxy_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft_mode)
 {
     int ret = 0;
     struct proto_ipc* ipc_proto;
@@ -1541,11 +1540,9 @@ int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft
 					TRPRINTF("Find IP %s\n", mac_ip);            
                     machex = parseIPV4string(mac_ip);
                     TRPRINTF("Find IP HEX %08x\n", machex);
+
                     if (machex)
                         main_machex = machex;
-                    
-
-                    ipc_proto->nic[idx] = machex;
                     //memcpy(ipc_proto->nic[idx], &machex, sizeof(machex));
                     //memcpy((void *)&ipc_array[sizeof(struct proto_ipc) + (idx * IP_LENGTH)], &machex, sizeof(machex));                  
                 }
@@ -1556,15 +1553,19 @@ int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft
 #endif
     }
 
+    if (main_machex) {
+       ipc_proto->nic[0] = main_machex;
+       TRPRINTF("Show NIC %08x\n", ipc_proto->nic[0]);
+    }
 //    else {
 //        memcpy((void *)&ipc_array[sizeof(struct proto_ipc)], &main_machex, sizeof(main_machex));  
 //    }
-    TRPRINTF("send IPC packet\n");
+    //TRPRINTF("send IPC packet\n");
     ret = send(ipc_fd, &ipc_array, sizeof(ipc_array), 0);
 
-    //memset(ipc_array, 0x0, sizeof(ipc_array));
+    memset(ipc_array, 0x0, sizeof(ipc_array));
 
-    memset(&ipc_proto->conn, 0x00, TOTAL_CONN*CONNECTION_LENGTH);
+    //memset(&ipc_proto->conn, 0x00, CONNECTION_LENGTH * TOTAL_CONN);
 
     TRPRINTF("sizeof ipc_array %lu\n", sizeof(ipc_array));
 
@@ -1575,7 +1576,7 @@ int cuju_ft_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju_ft
 }
 
 #if ENABLE_LOOP_SEND_IP 
-int cuju_ft_ipc_send_time_trig(char* addr)
+int cuju_proxy_ipc_send_time_trig(char* addr)
 {
     int ret = 0;
     struct proto_ipc* ipc_proto;
