@@ -1761,26 +1761,6 @@ ETEXI
         .help       = "set QOM property",
         .cmd        = hmp_qom_set,
     },
-
-STEXI
-@item qom-set @var{path} @var{property} @var{value}
-Set QOM property @var{property} of object at location @var{path} to value @var{value}
-ETEXI
-
-    {
-        .name       = "info",
-        .args_type  = "item:s?",
-        .params     = "[subcommand]",
-        .help       = "show various information about the system state",
-        .cmd        = hmp_info_help,
-        .sub_table  = info_cmds,
-    },
-
-STEXI
-@end table
-ETEXI
-
-
     {
         .name       = "cuju-failover",
         .args_type  = "",
@@ -1857,3 +1837,25 @@ STEXI
 @item cuju-migrate-cancel
 @findex cuju-migrate-cancel
 cancel the current VM fault tolerance.
+
+ETEXI
+
+STEXI
+@item qom-set @var{path} @var{property} @var{value}
+Set QOM property @var{property} of object at location @var{path} to value @var{value}
+ETEXI
+
+    {
+        .name       = "info",
+        .args_type  = "item:s?",
+        .params     = "[subcommand]",
+        .help       = "show various information about the system state",
+        .cmd        = hmp_info_help,
+        .sub_table  = info_cmds,
+    },
+
+STEXI
+@end table
+ETEXI
+
+
