@@ -1427,6 +1427,11 @@ void cuju_proxy_ipc_notify_ft(unsigned int epoch_id)
     cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_HANDOVER);
 }
 
+void cuju_proxy_ipc_notify_snapshot(unsigned int epoch_id)
+{
+    cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_SNAPSHOT);
+}
+
 void cuju_proxy_ipc_init_info(unsigned int epoch_id)
 {
     cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_INIT);
@@ -1499,13 +1504,14 @@ int cuju_proxy_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju
     ipc_proto->cuju_ft_mode = cuju_ft_mode;
     ipc_proto->nic_count = nb_nics;
 
+#if 0
     if (cuju_ft_mode == CUJU_FT_TRANSACTION_RUN) {
         ipc_proto->epoch_id = epoch_id;
     }
     else if (cuju_ft_mode == CUJU_FT_TRANSACTION_FLUSH_OUTPUT) {
         ipc_proto->flush_id = epoch_id;
     }
-
+#endif
 
     //if ((cuju_ft_mode == CUJU_FT_INIT) || (epoch_id  > epoch_id_arp_time + 200)) {
     if (cuju_ft_mode == CUJU_FT_INIT || cuju_ft_mode == CUJU_FT_TRANSACTION_HANDOVER) {
@@ -1670,4 +1676,26 @@ char *arp_get_ip(const char *req_mac)
     fclose(proc);
  
     return reply;
+}
+
+
+void recv_snapshot_signal(void)
+{
+#if 1
+#else    
+    //ipc_fd
+    unsigned int read_size = 0;
+    char read_string[1024];
+
+    //printf("[%s] \n", __func__);
+    
+    while ((read_size = recv(ipc_fd, &read_string, 1024, 0)) > 0)
+    {
+        //printf("[%s] size:%d\n", __func__, read_size);
+        if (read_size)
+            break;
+    }
+  
+    return;
+#endif 
 }

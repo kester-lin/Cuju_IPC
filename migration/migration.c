@@ -3014,6 +3014,9 @@ static void migrate_run(MigrationState *s)
 	cuju_vhost_vm_state_notify(1, 9);
 	/* ------------------------ */
 
+    if (haproxy_ipc)
+        cuju_proxy_ipc_epoch_timer(++g_epoch_id);
+
     vm_start_mig();
 
     s->run_real_start_time = time_in_double();
@@ -3055,7 +3058,7 @@ static void migrate_timer(void *opaque)
     qemu_iohandler_ft_pause(true);
 
     if (haproxy_ipc)
-        cuju_proxy_ipc_epoch_timer(++g_epoch_id);
+        cuju_proxy_ipc_notify_snapshot(g_epoch_id);
 
 
     s->flush_vs_commit1 = false;
@@ -3086,6 +3089,9 @@ static void migrate_timer(void *opaque)
 #endif
 
     s->ft_dev->ft_dev_put_off = 0;
+
+    if (haproxy_ipc)
+        recv_snapshot_signal();
 
     //qemu_fflush(s->file);
     //ft_trans_flush_buf_desc(s->file);
