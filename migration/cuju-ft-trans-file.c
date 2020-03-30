@@ -1343,6 +1343,8 @@ int cuju_proxy_init(const char *p, int failover)
     
     ipc_fd = socket_connect(sa, &err, NULL, NULL);
 
+    socket_set_nodelay(ipc_fd);
+
     flags = fcntl(ipc_fd, F_GETFL, 0);
     fcntl(ipc_fd, F_SETFL, flags|O_NONBLOCK);
 
@@ -1353,7 +1355,7 @@ int cuju_proxy_init(const char *p, int failover)
     }
 
     if (failover) {
-        cuju_proxy_ipc_notify_ft(0);
+        cuju_proxy_ipc_notify_failover(0);
     }
     else {
         cuju_proxy_ipc_init_info(0);
@@ -1422,7 +1424,7 @@ void cuju_proxy_ipc_epoch_commit(unsigned int epoch_id)
     cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_FLUSH_OUTPUT);
 }
 
-void cuju_proxy_ipc_notify_ft(unsigned int epoch_id)
+void cuju_proxy_ipc_notify_failover(unsigned int epoch_id)
 {
     cuju_proxy_ipc_send_cmd(haproxy_ipc, epoch_id, CUJU_FT_TRANSACTION_HANDOVER);
 }
@@ -1681,7 +1683,7 @@ char *arp_get_ip(const char *req_mac)
 
 void recv_snapshot_signal(void)
 {
-#if 1
+#if 0
 #else    
     //ipc_fd
     unsigned int read_size = 0;

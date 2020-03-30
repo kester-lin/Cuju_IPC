@@ -2695,8 +2695,8 @@ static void *migration_thread(void *opaque)
 
 		//memory_global_dirty_log_start();  //For debug
 
-        if(haproxy_ipc)
-            cuju_proxy_ipc_notify_ft(g_epoch_id);
+        /////if(haproxy_ipc)
+        ////    cuju_proxy_ipc_notify_ft(g_epoch_id);
 
         kvm_shmem_start_ft();
 
