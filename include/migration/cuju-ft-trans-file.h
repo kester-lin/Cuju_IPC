@@ -257,7 +257,7 @@ int cuju_proxy_ipc_send_cmd(char* addr, unsigned int epoch_id, unsigned int cuju
 void cuju_proxy_ipc_epoch_timer(unsigned int epoch_id);
 void cuju_proxy_ipc_epoch_commit(unsigned int epoch_id);
 void cuju_proxy_ipc_notify_snapshot(unsigned int epoch_id);
-////void cuju_proxy_ipc_notify_ft(unsigned int epoch_id);
+void cuju_proxy_ipc_notify_ft(unsigned int epoch_id);
 void cuju_proxy_ipc_notify_failover(unsigned int epoch_id);
 void cuju_proxy_ipc_init_info(unsigned int epoch_id);
 void recv_snapshot_signal(void);
